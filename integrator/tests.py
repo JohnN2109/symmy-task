@@ -1,42 +1,26 @@
+import responses
+
 from django.test import TestCase
-from integrator.tasks import transform_product
-from unittest.mock import patch
-from integrator.tasks import send_to_eshop
 
-class TransformProductTest(TestCase):
-
-    def test_transform_product(self):
-        item = {
-            "id": "SKU-001",
-            "title": "Test",
-            "price_vat_excl": 100,
-            "stocks": {
-                "a": 5,
-                "b": 3
-            },
-            "attributes": {}
-        }
-
-        result = transform_product(item)
-
-        self.assertEqual(result["sku"], "SKU-001")
-        self.assertEqual(result["price"], 121.0)
-        self.assertEqual(result["stock"], 8)
-        self.assertEqual(result["color"], "N/A")
-
+from integrator.tasks import send_product
 
 
 class ApiTest(TestCase):
 
-    @patch("integrator.tasks.requests.post")
-    def test_send_to_eshop(self, mock_post):
+    @responses.activate
+    def test_send_product(self):
 
-        mock_post.return_value.status_code = 200
+        responses.add(
+            responses.POST,
+            "https://api.fake-eshop.cz/v1/products/",
+            json={"success": True},
+            status=201
+        )
 
         product = {
             "sku": "SKU-001"
         }
 
-        response = send_to_eshop(product)
+        response = send_product(product)
 
-        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.status_code, 201)

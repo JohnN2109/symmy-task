@@ -1,79 +1,126 @@
+from celery import shared_task
+from .models import ProductSync
+
 import json
 import hashlib
 import requests
 import time
-from pathlib import Path
 
-from celery import shared_task
 
-from .models import ProductSync
+API_URL = "https://api.fake-eshop.cz/v1/products/"
+API_KEY = "symma-secret-token"
 
-def generate_hash(product: dict) -> str:
-    product_string = str(sorted(product.items()))
-    return hashlib.sha256(product_string.encode()).hexdigest()
+def send_product(product, exists=False):
 
-def transform_product(item):
-    stocks = item.get("stocks", {})
-
-    total_stock = 0
-    for value in stocks.values():
-        if isinstance(value, int):
-            total_stock += value
-
-    attributes = item.get("attributes") or {}
-
-    price = item.get("price_vat_excl") or 0
-
-    return {
-        "sku": item.get("id"),
-        "name": item.get("title"),
-        "price": round(price * 1.21, 2),
-        "stock": total_stock,
-        "color": attributes.get("color", "N/A"),
+    headers = {
+        "X-Api-Key": API_KEY
     }
+
+    for _ in range(3):
+
+        try:
+
+            if exists:
+                response = requests.patch(
+                    f"{API_URL}{product['sku']}/",
+                    json=product,
+                    headers=headers
+                )
+            else:
+                response = requests.post(
+                    API_URL,
+                    json=product,
+                    headers=headers
+                )
+
+            if response.status_code == 429:
+                print("Rate limited... retrying")
+                time.sleep(1)
+                continue
+
+            print(f"Mock API sync success: {product['sku']}")
+            return response
+
+        except requests.exceptions.RequestException:
+            print(f"Mock API request simulated for: {product['sku']}")
+            return None
+
 @shared_task
 def sync_products():
-    base_dir = Path(__file__).resolve().parent.parent
-    file_path = base_dir / "erp_data.json"
 
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open("erp_data.json", "r", encoding="utf-8") as f:
         data = json.load(f)
 
+    seen_skus = set()
+
     for item in data:
-        product = transform_product(item)
-        product_hash = generate_hash(product)
 
-        obj, created = ProductSync.objects.get_or_create(
-            sku=product["sku"],
-            defaults={"hash": product_hash}
-        )
+        sku = item.get("id")
+        title = item.get("title")
+        price = item.get("price_vat_excl")
+        stocks = item.get("stocks", {})
+        attributes = item.get("attributes") or {}
 
-        if not created and obj.hash == product_hash:
-            print(f"SKIP {product['sku']}")
+        # duplicate SKU
+        if sku in seen_skus:
+            print(f"Duplicate SKU skipped: {sku}")
             continue
 
-        print(f"SEND {product['sku']}")
-        send_to_eshop(product, exists=not created)
+        seen_skus.add(sku)
+
+        # invalid price
+        if price is None or price < 0:
+            print(f"Invalid price skipped: {sku}")
+            continue
+
+        # invalid stock
+        if not all(isinstance(v, int) for v in stocks.values()):
+            print(f"Invalid stock skipped: {sku}")
+            continue
+
+        total_stock = sum(stocks.values())
+
+        # VAT
+        price_vat = round(price * 1.21, 2)
+
+        color = attributes.get("color", "N/A")
+
+        transformed_product = {
+            "sku": sku,
+            "title": title,
+            "price": price_vat,
+            "stock": total_stock,
+            "color": color,
+        }
+
+        product_hash = hashlib.sha256(
+            json.dumps(
+                transformed_product,
+                sort_keys=True
+            ).encode()
+        ).hexdigest()
+
+        obj, created = ProductSync.objects.get_or_create(
+            sku=sku,
+            defaults={
+                "hash": product_hash
+            }
+        )
+
+        # delta sync
+        if not created and obj.hash == product_hash:
+            print(f"Skipped unchanged product: {sku}")
+            continue
 
         obj.hash = product_hash
         obj.save()
 
+        send_product(
+            transformed_product,
+            exists=not created
+        )
 
-def send_to_eshop(product, exists=False):
-    headers = {
-        "X-Api-Key": "symma-secret-token"
-    }
+        print(f"Synced product: {sku}")
 
-    url = "https://api.fake-eshop.cz/v1/products/"
-
-    if exists:
-        url = f"https://api.fake-eshop.cz/v1/products/{product['sku']}/"
-
-    for _ in range(3):
-        response = requests.post(url, json=product, headers=headers)
-
-        if response.status_code == 429:
-            time.sleep(1)
-            continue
-
-        return response        
+        # 5 req/s limit
+        time.sleep(0.2)

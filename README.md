@@ -1,10 +1,41 @@
 # Symmy Integrator
 
+Async ERP → E-shop synchronization service built with Django, Celery, Redis and PostgreSQL.
+
+---
+
+## Features
+
+- Celery async synchronization
+- Product validation
+- Delta sync using SHA256 hash
+- Retry logic for rate limiting
+- Mocked E-shop API
+- Docker support
+
+---
+
+## Architecture
+
+ERP JSON
+↓
+Celery Task
+↓
+Validation + Transformation
+↓
+Delta Sync
+↓
+Mocked E-shop API
+
+---
+
 ## Run project
 
 ```bash
 docker compose up --build
 ```
+
+---
 
 ## Run migrations
 
@@ -12,11 +43,15 @@ docker compose up --build
 docker compose exec web python manage.py migrate
 ```
 
-## Run sync
+---
+
+## Run synchronization
 
 ```bash
 docker compose exec web python manage.py shell
 ```
+
+Then run:
 
 ```python
 from integrator.tasks import sync_products
@@ -25,13 +60,17 @@ sync_products.delay()
 
 ---
 
-## Features
+## Run tests
 
-- Celery async synchronization
-- Delta sync using SHA256 hash
-- Mocked e-shop API
-- Retry logic for 429 rate limiting
-- Product transformation:
-  - stock aggregation
-  - 21% VAT
-  - default color fallback
+```bash
+docker compose exec web python manage.py test
+```
+
+---
+
+## Validation rules
+
+- negative price -> invalid
+- missing price -> invalid
+- duplicate SKU -> invalid
+- invalid stock value -> invalid
