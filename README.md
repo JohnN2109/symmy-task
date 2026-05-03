@@ -15,8 +15,16 @@ Async ERP → E-shop synchronization service built with Django, Celery, Redis an
 
 ---
 
-## Architecture
+## Tech stack
 
+- Django
+- Celery
+- Redis
+- PostgreSQL
+- Docker
+
+## Architecture
+---
 ERP JSON
 ↓
 Celery Task
@@ -74,3 +82,10 @@ docker compose exec web python manage.py test
 - missing price -> invalid
 - duplicate SKU -> invalid
 - invalid stock value -> invalid
+
+---
+
+## Notes
+
+The E-shop API is mocked intentionally because the provided API endpoint does not exist.
+Synchronization requests are simulated via logging.
