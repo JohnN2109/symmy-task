@@ -25,15 +25,15 @@ Async ERP → E-shop synchronization service built with Django, Celery, Redis an
 
 ## Architecture
 ---
-ERP JSON
+- ERP JSON
 ↓
-Celery Task
+- Celery Task
 ↓
-Validation + Transformation
+- Validation + Transformation
 ↓
-Delta Sync
+- Delta Sync
 ↓
-Mocked E-shop API
+- Mocked E-shop API
 
 ---
 
