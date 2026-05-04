@@ -89,3 +89,10 @@ docker compose exec web python manage.py test
 
 The E-shop API is mocked intentionally because the provided API endpoint does not exist.
 Synchronization requests are simulated via logging.
+
+---
+
+## Screenshot of working worker
+
+<img width="1920" height="1080" alt="image" src="https://github.com/user-attachments/assets/00c26329-7d6e-4245-9288-072991ec64cf" />
+
